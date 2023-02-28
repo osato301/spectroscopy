@@ -1,0 +1,103 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Wed Mar  1 11:22:04 2023
+
+@author: oliviasato
+"""
+
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+
+#importing UV-Vis absorption spectrum for Lys in Buffer as dataframe
+lysozyme_absorption = pd.read_csv('LysozymeinBuffer_dilute_4.csv')
+print(lysozyme_absorption.head())
+lysozyme_absorption.columns = ['Wavelength (nm)', 'Abs Lys','null']
+lysozyme_absorption = lysozyme_absorption.drop(labels=0, axis=0)
+lysozyme_absorption = lysozyme_absorption.drop(columns='null')
+lysozyme_absorption = lysozyme_absorption.apply(pd.to_numeric)
+
+
+#importing UV-Vis absorption spectrum for just Buffer as dataframe
+#deleting Wavelength column because it will be redundant
+buffer_absorption = pd.read_csv('Buffersolution.csv')
+print(buffer_absorption.head())
+buffer_absorption.columns = ['Wavelength (nm)', 'Abs Buf','null']
+buffer_absorption = buffer_absorption.drop(labels=0, axis=0)
+buffer_absorption = buffer_absorption.drop(columns=['Wavelength (nm)','null'])
+buffer_absorption = buffer_absorption.apply(pd.to_numeric)
+
+#combining absorption dataframes and subtracting background
+#note that dataframes can be combined like this because they share identical wavelength ranges and sampling rate
+combined_abs= pd.concat([lysozyme_absorption,buffer_absorption], axis=1, join='inner')
+combined_abs['Abs (Lys-Buf)'] = np.nan
+combined_abs['Abs (Lys-Buf)'] = combined_abs['Abs Lys'] - combined_abs['Abs Buf']
+
+#plotting Lys-Background Abs vs. Wavelength
+#plot_abs = combined_abs.plot(kind ='line', x='Wavelength (nm)', y='Abs (Lys-Buf)', ylim=(0,1))
+
+#importing PL spectrum as dataframe
+lysozyme_PL = pd.read_csv('PLfinalscan1nm.csv')
+print(lysozyme_PL.head())
+lysozyme_PL.columns = ['Wavelength (nm)', 'PL','null']
+lysozyme_PL = lysozyme_PL.drop(range(0,20),axis=0)
+lysozyme_PL = lysozyme_PL.drop(columns='null')
+lysozyme_PL = lysozyme_PL.apply(pd.to_numeric)
+
+#plotting PL vs. Wavelength
+#plot_PL = lysozyme_PL.plot(kind = 'line', x='Wavelength (nm)', y='PL')
+
+#converting wavelengths and magnitudes to arrays for subplots
+#magnitudes are normalized for peaks of interest
+wavelength_abs = combined_abs['Wavelength (nm)'].to_numpy()
+magnitude_abs = combined_abs['Abs (Lys-Buf)'].to_numpy()
+magnitude_abs = magnitude_abs/0.5
+wavelength_PL = lysozyme_PL['Wavelength (nm)'].to_numpy()
+magnitude_PL = lysozyme_PL['PL'].to_numpy()
+max_PL = np.amax(magnitude_PL)
+magnitude_PL = magnitude_PL/max_PL
+
+#finding peaks and dropping vertical lines
+#when I have time + interest I should make this a function
+#creating sub dataframe for wavelength range that might include peak
+abs_peak = combined_abs
+abs_peak_range_bottom = 250.0
+abs_peak_range_top = 300.0
+abs_peak = abs_peak.loc[abs_peak['Wavelength (nm)'] > abs_peak_range_bottom]
+abs_peak = abs_peak.loc[abs_peak['Wavelength (nm)'] < abs_peak_range_top]
+#search sub dataframe for max, return wavelength of max location
+abs_peak_value = abs_peak['Abs (Lys-Buf)'].max()
+abs_peak_index = list(np.where(abs_peak['Abs (Lys-Buf)'] == abs_peak_value))
+#this is NOT redundant. The OG abs_peak_index is a list of one 1-element lists.
+abs_peak_index = abs_peak_index[0]
+abs_peak_index = abs_peak_index[0]
+abs_peak_wavelength = abs_peak['Wavelength (nm)'].iloc[abs_peak_index]
+#repeating for PL
+pl_peak = lysozyme_PL
+pl_peak_range_bottom = 450.0
+pl_peak_range_top = 500.0
+pl_peak = pl_peak.loc[pl_peak['Wavelength (nm)'] > pl_peak_range_bottom]
+pl_peak = pl_peak.loc[pl_peak['Wavelength (nm)'] < pl_peak_range_top]
+pl_peak_value = pl_peak['PL'].max()
+pl_peak_index = list(np.where(pl_peak['PL'] == pl_peak_value))
+pl_peak_index = pl_peak_index[0]
+pl_peak_index = pl_peak_index[0]
+pl_peak_wavelength = pl_peak['Wavelength (nm)'].iloc[pl_peak_index]
+
+#plotting absorption and PL vs wavelength
+mag_max = 1.1
+plt.figure(dpi=800)
+plt.plot(wavelength_abs, magnitude_abs, label = 'Absorption')
+plt.plot(wavelength_PL, magnitude_PL, label = 'Photoluminescence')
+plt.xlim([200,800])
+plt.ylim([0,mag_max])
+plt.vlines(x = abs_peak_wavelength, ymin = 0, ymax = mag_max, colors = 'blue', label = 'peak absorption = ' + str(round(abs_peak_wavelength,1)))
+plt.vlines(x = pl_peak_wavelength, ymin = 0, ymax = mag_max, colors = 'orange', label = 'peak PL = ' + str(round(pl_peak_wavelength,1)))
+plt.xlabel('Wavelength (nm)')
+plt.ylabel('Normalized Magnitude')
+plt.legend()
+plt.title('Lysozyme in pH7 Buffer')
+plt.savefig('lysozyme_abs_PL.png')
+plt.show()
+
